@@ -102,6 +102,82 @@ gboolean advance_animation(gpointer data) {
     return G_SOURCE_REMOVE;
 }
 
+// Three horizontal/vertical box-blur passes approximate a Gaussian blur.
+// The caller downsamples first, keeping animated GIF backgrounds inexpensive.
+GdkPixbuf* box_blur_pixbuf(GdkPixbuf* source, int radius) {
+    if (radius <= 0) return gdk_pixbuf_copy(source);
+
+    const int width = gdk_pixbuf_get_width(source);
+    const int height = gdk_pixbuf_get_height(source);
+    const int channels = gdk_pixbuf_get_n_channels(source);
+    if (width <= 1 && height <= 1) return gdk_pixbuf_copy(source);
+
+    radius = std::clamp(radius, 1, 12);
+    const int window_size = radius * 2 + 1;
+    GdkPixbuf* first = gdk_pixbuf_copy(source);
+    GdkPixbuf* second = gdk_pixbuf_copy(source);
+    if (!first || !second) {
+        if (first) g_object_unref(first);
+        if (second) g_object_unref(second);
+        return nullptr;
+    }
+
+    for (int pass = 0; pass < 3; ++pass) {
+        const guchar* input = gdk_pixbuf_get_pixels(first);
+        guchar* horizontal = gdk_pixbuf_get_pixels(second);
+        const int input_stride = gdk_pixbuf_get_rowstride(first);
+        const int horizontal_stride = gdk_pixbuf_get_rowstride(second);
+
+        // Horizontal sliding-window average.
+        for (int y = 0; y < height; ++y) {
+            for (int channel = 0; channel < channels; ++channel) {
+                int sum = 0;
+                for (int offset = -radius; offset <= radius; ++offset) {
+                    const int sample_x = std::clamp(offset, 0, width - 1);
+                    sum += input[y * input_stride + sample_x * channels + channel];
+                }
+                for (int x = 0; x < width; ++x) {
+                    horizontal[y * horizontal_stride + x * channels + channel] =
+                        static_cast<guchar>((sum + window_size / 2) / window_size);
+                    const int leaving_x = std::clamp(x - radius, 0, width - 1);
+                    const int entering_x = std::clamp(x + radius + 1, 0, width - 1);
+                    sum -= input[y * input_stride + leaving_x * channels + channel];
+                    sum += input[y * input_stride + entering_x * channels + channel];
+                }
+            }
+        }
+
+        // Vertical sliding-window average.
+        const guchar* vertical_input = gdk_pixbuf_get_pixels(second);
+        guchar* output = gdk_pixbuf_get_pixels(first);
+        const int vertical_stride = gdk_pixbuf_get_rowstride(second);
+        const int output_stride = gdk_pixbuf_get_rowstride(first);
+        for (int x = 0; x < width; ++x) {
+            for (int channel = 0; channel < channels; ++channel) {
+                int sum = 0;
+                for (int offset = -radius; offset <= radius; ++offset) {
+                    const int sample_y = std::clamp(offset, 0, height - 1);
+                    sum += vertical_input[sample_y * vertical_stride +
+                                          x * channels + channel];
+                }
+                for (int y = 0; y < height; ++y) {
+                    output[y * output_stride + x * channels + channel] =
+                        static_cast<guchar>((sum + window_size / 2) / window_size);
+                    const int leaving_y = std::clamp(y - radius, 0, height - 1);
+                    const int entering_y = std::clamp(y + radius + 1, 0, height - 1);
+                    sum -= vertical_input[leaving_y * vertical_stride +
+                                          x * channels + channel];
+                    sum += vertical_input[entering_y * vertical_stride +
+                                          x * channels + channel];
+                }
+            }
+        }
+    }
+
+    g_object_unref(second);
+    return first;
+}
+
 gboolean draw_background(GtkWidget* widget, cairo_t* cr, gpointer data) {
     auto* app = static_cast<App*>(data);
     const int width = gtk_widget_get_allocated_width(widget);
@@ -145,16 +221,28 @@ gboolean draw_background(GtkWidget* widget, cairo_t* cr, gpointer data) {
         if (!cover) return FALSE;
         const int blur = std::clamp(app->background_blur, 0, 10);
         if (blur > 0) {
-            const int divisor = 1 + blur * 2;
+            // Work on a smaller copy, then scale it back up. This keeps the
+            // per-frame cost of a moving GIF background bounded.
+            const int divisor = 1 + std::min(3, (blur + 2) / 3);
             GdkPixbuf* small = gdk_pixbuf_scale_simple(
                 cover, std::max(1, scaled_width / divisor),
                 std::max(1, scaled_height / divisor), GDK_INTERP_BILINEAR);
             if (small) {
-                app->rendered_background = gdk_pixbuf_scale_simple(
-                    small, scaled_width, scaled_height, GDK_INTERP_BILINEAR);
+                GdkPixbuf* softened = box_blur_pixbuf(
+                    small, std::max(1, blur / divisor));
+                if (softened) {
+                    app->rendered_background = gdk_pixbuf_scale_simple(
+                        softened, scaled_width, scaled_height, GDK_INTERP_BILINEAR);
+                    g_object_unref(softened);
+                }
                 g_object_unref(small);
             }
-            g_object_unref(cover);
+            if (app->rendered_background) {
+                g_object_unref(cover);
+            } else {
+                // Fall back to the unblurred image if allocation fails.
+                app->rendered_background = cover;
+            }
         } else {
             app->rendered_background = cover;
         }
