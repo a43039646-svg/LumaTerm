@@ -11,6 +11,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <deque>
 #include <string>
 #include <vector>
@@ -485,9 +486,9 @@ gboolean on_terminal_key_press(GtkWidget* widget, GdkEventKey* event, gpointer u
                 return TRUE;
             case GDK_KEY_c:
             case GDK_KEY_C:
-                gtk_clipboard_request_text(gtk_widget_get_clipboard(widget,
-                    GDK_SELECTION_CLIPBOARD), nullptr, nullptr);
-                return FALSE;
+                // Text selection/copy is implemented separately from the
+                // terminal parser. Do not turn this desktop shortcut into ^C.
+                return TRUE;
             case GDK_KEY_v:
             case GDK_KEY_V:
                 gtk_clipboard_request_text(gtk_widget_get_clipboard(widget,
@@ -544,6 +545,26 @@ gboolean on_terminal_scroll(GtkWidget* widget, GdkEventScroll* event, gpointer u
     return TRUE;
 }
 
+void on_widget_destroy(GtkWidget*, gpointer user) {
+    auto* engine = static_cast<TerminalEngine*>(user);
+    if (!engine) return;
+
+    if (engine->read_watch) {
+        g_source_remove(engine->read_watch);
+        engine->read_watch = 0;
+    }
+    if (engine->write_watch) {
+        g_source_remove(engine->write_watch);
+        engine->write_watch = 0;
+    }
+    if (engine->child_pid > 0) kill(-engine->child_pid, SIGHUP);
+    if (engine->pty_fd >= 0) {
+        close(engine->pty_fd);
+        engine->pty_fd = -1;
+    }
+    engine->pending_output.clear();
+}
+
 void destroy_terminal_engine(gpointer data) {
     auto* engine = static_cast<TerminalEngine*>(data);
     if (!engine) return;
@@ -581,6 +602,9 @@ bool spawn_shell(TerminalEngine* engine, const std::string& shell, GError** erro
         return false;
     }
     const std::string slave_path(slave_name);
+    gchar* shell_basename = g_path_get_basename(shell.c_str());
+    const std::string login_name = std::string("-") + shell_basename;
+    g_free(shell_basename);
 
     const pid_t child = fork();
     if (child < 0) {
@@ -618,9 +642,6 @@ bool spawn_shell(TerminalEngine* engine, const std::string& shell, GError** erro
 
         setenv("TERM", "xterm-256color", 1);
         setenv("COLORTERM", "truecolor", 1);
-        const gchar* base_name = g_path_get_basename(shell.c_str());
-        const std::string login_name = std::string("-") + base_name;
-        g_free(const_cast<gchar*>(base_name));
         execl(shell.c_str(), login_name.c_str(), static_cast<char*>(nullptr));
         execl(shell.c_str(), shell.c_str(), static_cast<char*>(nullptr));
         _exit(127);
@@ -721,6 +742,8 @@ GtkWidget* terminal_widget_new(const std::string& shell,
                      G_CALLBACK(on_terminal_key_press), engine);
     g_signal_connect(widget, "scroll-event",
                      G_CALLBACK(on_terminal_scroll), engine);
+    g_signal_connect(widget, "destroy",
+                     G_CALLBACK(on_widget_destroy), engine);
 
     update_font_metrics(engine);
     GError* error = nullptr;
@@ -732,7 +755,9 @@ GtkWidget* terminal_widget_new(const std::string& shell,
         gtk_dialog_run(GTK_DIALOG(dialog));
         gtk_widget_destroy(dialog);
         if (error) g_error_free(error);
-        return widget;
+        gtk_widget_destroy(widget);
+        g_object_unref(widget);
+        return nullptr;
     }
     return widget;
 }
