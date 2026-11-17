@@ -279,7 +279,8 @@ void draw_cell(TerminalEngine* engine, cairo_t* cr, PangoLayout* layout,
     pango_font_description_free(font);
     pango_layout_set_text(layout, text.c_str(), static_cast<int>(text.size()));
 
-    if (foreground_transparent) foreground = engine->default_foreground;
+    // Keep the resolved color after reverse-video swapping. In that case a
+    // default background color becomes the foreground text color.
     gdk_cairo_set_source_rgba(cr, &foreground);
     cairo_move_to(cr, x, y);
     pango_cairo_show_layout(cr, layout);
