@@ -440,7 +440,8 @@ bool send_special_key(TerminalEngine* engine, guint keyval, VTermModifier modifi
         case GDK_KEY_KP_Equal: key = VTERM_KEY_KP_EQUAL; break;
         default:
             if (keyval >= GDK_KEY_F1 && keyval <= GDK_KEY_F35)
-                key = VTERM_KEY_FUNCTION(static_cast<int>(keyval - GDK_KEY_F1 + 1));
+                key = static_cast<VTermKey>(
+                    VTERM_KEY_FUNCTION(static_cast<int>(keyval - GDK_KEY_F1 + 1)));
             break;
     }
 
@@ -683,6 +684,8 @@ GtkWidget* terminal_widget_new(const std::string& shell,
     if (!engine->vterm) {
         pango_font_description_free(engine->font);
         delete engine;
+        gtk_widget_destroy(widget);
+        g_object_unref(widget);
         return nullptr;
     }
     vterm_set_utf8(engine->vterm, 1);
