@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include <gst/gst.h>
-#include <vte/vte.h>
+#include "terminal_widget.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -205,7 +205,7 @@ gboolean draw_background(GtkWidget* widget, cairo_t* cr, gpointer data) {
         clear_rendered_background(app);
     }
 
-    // Scale once per window size; VTE redraws often while commands are running.
+    // Scale once per window size; terminal redraws frequently while commands are running.
     if (!app->rendered_background) {
         double scale_x = static_cast<double>(width) / image_width;
         double scale_y = static_cast<double>(height) / image_height;
@@ -397,34 +397,6 @@ gboolean on_video_bus_message(GstBus*, GstMessage* message, gpointer data) {
     return G_SOURCE_CONTINUE;
 }
 
-gboolean on_terminal_key_press(GtkWidget*, GdkEventKey* event, gpointer data) {
-    auto* terminal = VTE_TERMINAL(data);
-    const GdkModifierType modifiers = static_cast<GdkModifierType>(
-        event->state & gtk_accelerator_get_default_mod_mask());
-    if ((modifiers & (GDK_CONTROL_MASK | GDK_SHIFT_MASK)) !=
-        (GDK_CONTROL_MASK | GDK_SHIFT_MASK)) return FALSE;
-
-    double scale = vte_terminal_get_font_scale(terminal);
-    switch (event->keyval) {
-        case GDK_KEY_plus:
-        case GDK_KEY_equal:
-        case GDK_KEY_KP_Add:
-            scale = std::min(2.5, scale * 1.1);
-            break;
-        case GDK_KEY_minus:
-        case GDK_KEY_KP_Subtract:
-            scale = std::max(0.5, scale / 1.1);
-            break;
-        case GDK_KEY_0:
-        case GDK_KEY_KP_0:
-            scale = 1.0;
-            break;
-        default:
-            return FALSE;
-    }
-    vte_terminal_set_font_scale(terminal, scale);
-    return TRUE;
-}
 
 void start_video_background(App* app, GtkWidget* overlay, const char* path) {
     GError* error = nullptr;
@@ -492,10 +464,6 @@ void start_video_background(App* app, GtkWidget* overlay, const char* path) {
     gst_element_set_state(app->video_player, GST_STATE_PLAYING);
 }
 
-void on_child_exited(VteTerminal*, gint, gpointer data) {
-    gtk_main_quit();
-    (void)data;
-}
 
 double config_double(GKeyFile* file, const char* key, double fallback) {
     GError* error = nullptr;
@@ -606,46 +574,13 @@ int main(int argc, char** argv) {
         start_background_load(&app, app.background_path.c_str());
     }
 
-    app.terminal = vte_terminal_new();
-    gtk_widget_set_name(app.terminal, "lumaterm-terminal");
-    gtk_widget_set_hexpand(app.terminal, TRUE);
-    gtk_widget_set_vexpand(app.terminal, TRUE);
-    gtk_widget_set_margin_start(app.terminal, 12);
-    gtk_widget_set_margin_end(app.terminal, 12);
-    gtk_widget_set_margin_top(app.terminal, 10);
-    gtk_widget_set_margin_bottom(app.terminal, 10);
-    vte_terminal_set_scrollback_lines(VTE_TERMINAL(app.terminal), 5000);
-    vte_terminal_set_cursor_blink_mode(VTE_TERMINAL(app.terminal), VTE_CURSOR_BLINK_ON);
-    vte_terminal_set_font_scale(VTE_TERMINAL(app.terminal), 1.0);
-
-    PangoFontDescription* font = pango_font_description_new();
-    pango_font_description_set_family(font, app.font_family.c_str());
-    pango_font_description_set_size(font, app.font_size * PANGO_SCALE);
-    vte_terminal_set_font(VTE_TERMINAL(app.terminal), font);
-    pango_font_description_free(font);
-    GdkRGBA monochrome_palette[256];
-    const GdkRGBA* palette = nullptr;
-    gsize palette_size = 0;
-    if (app.monochrome_text) {
-        for (GdkRGBA& color : monochrome_palette) color = {1.0, 1.0, 1.0, 1.0};
-        palette = monochrome_palette;
-        palette_size = G_N_ELEMENTS(monochrome_palette);
-    }
-    vte_terminal_set_colors(VTE_TERMINAL(app.terminal), &app.text_color,
-                            &app.background_color, palette, palette_size);
-    vte_terminal_set_clear_background(VTE_TERMINAL(app.terminal), FALSE);
-    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), app.terminal);
-
     gchar* shell = g_strdup(g_getenv("SHELL") ? g_getenv("SHELL") : "/bin/sh");
-    gchar* argv_shell[] = {shell, nullptr};
-    vte_terminal_spawn_async(VTE_TERMINAL(app.terminal), VTE_PTY_DEFAULT,
-                             nullptr, argv_shell, nullptr, (GSpawnFlags)0,
-                             nullptr, nullptr, nullptr, -1, nullptr, nullptr,
-                             nullptr);
+    app.terminal = terminal_widget_new(
+        shell, app.font_family, app.font_size,
+        app.text_color, app.background_color, app.monochrome_text);
     g_free(shell);
-    g_signal_connect(app.terminal, "child-exited", G_CALLBACK(on_child_exited), &app);
-    g_signal_connect(app.terminal, "key-press-event",
-                     G_CALLBACK(on_terminal_key_press), app.terminal);
+    if (!app.terminal) return EXIT_FAILURE;
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), app.terminal);
 
     GtkCssProvider* css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css,
