@@ -1,13 +1,16 @@
 # LumaTerm
 
-LumaTerm is a configurable Linux terminal written in C++ with GTK 3 and VTE.
+LumaTerm is a configurable Linux terminal written in C++ with GTK 3 and
+[libvterm](https://www.leonerd.org.uk/code/libvterm/). LumaTerm owns its PTY
+process, terminal screen model, keyboard handling, and Cairo/Pango cell renderer.
 It supports still images, animated GIFs, and silent looping video backgrounds,
-plus glass opacity, background color and blur, terminal colors, and font settings.
+plus glass opacity, background color and blur, terminal colors, font settings,
+and scrollback.
 
 ## Build on Debian
 
 ```sh
-sudo apt install build-essential cmake pkg-config libgtk-3-dev libvte-2.91-dev libgstreamer1.0-dev
+sudo apt install build-essential cmake pkg-config libgtk-3-dev libvterm-dev libgstreamer1.0-dev
 cmake -S . -B build
 cmake --build build
 ./build/lumaterm
@@ -83,4 +86,12 @@ choose `background_color`. Restart LumaTerm after changing the config.
 The example configuration is also available at `config/settings.ini.example`.
 
 Keyboard font zoom: **Ctrl+Shift+=** to enlarge, **Ctrl+Shift+-** to shrink,
-and **Ctrl+Shift+0** to reset.
+and **Ctrl+Shift+0** to reset. Scrollback: use the mouse wheel or **Shift+PageUp**
+and **Shift+PageDown**.
+
+## Terminal engine
+
+VTE has been removed. The terminal now uses libvterm for VT parsing and screen
+state, plus LumaTerm's GTK/Cairo/Pango renderer and a PTY managed by LumaTerm.
+This is the foundation for implementing inline graphics protocols in LumaTerm;
+Kitty Graphics Protocol support is not included in this initial engine migration.

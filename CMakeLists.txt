@@ -7,13 +7,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
-pkg_check_modules(VTE REQUIRED IMPORTED_TARGET vte-2.91)
+pkg_check_modules(VTERM REQUIRED IMPORTED_TARGET vterm)
 pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0)
 
-add_executable(lumaterm src/main.cpp)
-target_link_libraries(lumaterm PRIVATE PkgConfig::GTK3 PkgConfig::VTE PkgConfig::GSTREAMER)
+add_executable(lumaterm src/main.cpp src/terminal_widget.cpp)
+target_link_libraries(lumaterm PRIVATE PkgConfig::GTK3 PkgConfig::VTERM PkgConfig::GSTREAMER)
 target_compile_options(lumaterm PRIVATE -Wall -Wextra -Wpedantic)
-target_compile_definitions(lumaterm PRIVATE LUMATERM_ICON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/icon.png")
+target_compile_definitions(lumaterm PRIVATE
+    _XOPEN_SOURCE=600
+    _DEFAULT_SOURCE
+    LUMATERM_ICON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/icon.png"
+)
 
 add_executable(lumaterm-settings src/settings.cpp)
 target_link_libraries(lumaterm-settings PRIVATE PkgConfig::GTK3)

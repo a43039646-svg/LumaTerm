@@ -287,11 +287,17 @@ int main(int argc, char** argv) {
     ui.opacity = make_scale(0.0, 1.0, 0.05, 0.85);
     gtk_scale_set_digits(GTK_SCALE(ui.opacity), 2);
     add_row(GTK_GRID(appearance), 4, "Background opacity", ui.opacity);
+    gtk_widget_set_tooltip_text(ui.opacity,
+        "0 is fully transparent; 1 is fully opaque. Requires a compositor for desktop transparency.");
     ui.blur = make_scale(0.0, 10.0, 1.0, 0.0);
     gtk_scale_set_digits(GTK_SCALE(ui.blur), 0);
-    add_row(GTK_GRID(appearance), 5, "Blur", ui.blur);
+    add_row(GTK_GRID(appearance), 5, "Background blur", ui.blur);
+    gtk_widget_set_tooltip_text(ui.blur,
+        "Three-pass soft blur. Animated backgrounds are blurred frame by frame.");
     ui.glass = gtk_check_button_new_with_label("Glass window (requires a compositor)");
     gtk_grid_attach(GTK_GRID(appearance), ui.glass, 1, 6, 1, 1);
+    gtk_widget_set_tooltip_text(ui.glass,
+        "Allows the desktop to show through transparent parts of the window; requires compositor support.");
     gtk_notebook_append_page(GTK_NOTEBOOK(notebook), appearance,
                              gtk_label_new("Background"));
 
