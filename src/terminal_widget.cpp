@@ -623,13 +623,10 @@ bool spawn_shell(TerminalEngine* engine, const std::string& shell, GError** erro
         if (slave < 0) _exit(126);
         ioctl(slave, TIOCSCTTY, 0);
 
-        struct termios terminal_settings{};
-        if (tcgetattr(slave, &terminal_settings) == 0) {
-            cfmakeraw(&terminal_settings);
-            terminal_settings.c_oflag |= OPOST;
-            terminal_settings.c_lflag |= (ISIG | ICANON | ECHO | ECHOE | ECHOK);
-            tcsetattr(slave, TCSANOW, &terminal_settings);
-        }
+        // Keep the kernel's sane default PTY settings. The shell and
+        // interactive programs switch to raw mode themselves when needed.
+        // Forcing cfmakeraw here would also disable ICRNL and break Enter
+        // while the line discipline is still in canonical mode.
 
         struct winsize size{};
         size.ws_row = kInitialRows;
