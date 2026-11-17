@@ -1,0 +1,10 @@
+# CMake build output and generated binaries
+/build/
+/cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Machine-specific appearance config; commit the example instead
+/config/settings.ini

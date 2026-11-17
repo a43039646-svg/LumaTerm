@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LumaTerm
+Comment=Customizable terminal with image and video backgrounds
+Exec=lumaterm
+Icon=lumaterm
+Terminal=false
+Categories=System;TerminalEmulator;Utility;
+Keywords=terminal;shell;console;

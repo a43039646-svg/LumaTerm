@@ -1,0 +1,12 @@
+[appearance]
+glass=true
+background_mode=image
+background=/home/your-name/Pictures/wallpaper.gif
+background_fit=cover
+background_color=#10131b
+background_opacity=0.82
+background_blur=2
+font_family=JetBrains Mono
+font_size=13
+text_color=#f2f4f8
+monochrome_text=false

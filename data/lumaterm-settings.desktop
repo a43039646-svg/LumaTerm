@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LumaTerm Settings
+Comment=Configure LumaTerm appearance
+Exec=lumaterm-settings
+Icon=lumaterm
+Terminal=false
+Categories=Settings;DesktopSettings;Utility;
+Keywords=terminal;appearance;wallpaper;theme;
